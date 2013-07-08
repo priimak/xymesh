@@ -1,7 +1,9 @@
 Adaptive mesh refinement for XY->Z problems
 =========================================
 
-== Overview
+Overview
+--------
+
 When performing numerical simulations one often deals with need to calculate certain
 values for each point in the predefined grid on XY plane. As a result of such
 calculation a 2D surface is formed in the X-Y-Z space. For example, the X axis might
@@ -16,8 +18,11 @@ fully automated. So that we can start with very rough grid and let separate prog
 add new points to the grid as necessary to make it as smooth as some predefined value.
 And this is exactly what this ruby package does. 
 
-== Algorithm
+Algorithm
+---------
 
-== Installation 
+Installation
+------------
 
-== Usage
+Usage
+-----
