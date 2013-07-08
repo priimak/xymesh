@@ -5,7 +5,12 @@ Overview
 --------
 
 When performing numerical simulations one often deals with need to calculate certain
-values for each point in the predefined grid on XY plane. As a result of such
+values for each point in the predefined grid on XY plane. 
+<br/>
+<center>
+<img src="images/basic_grid.gif"/>
+</center>
+As a result of such
 calculation a 2D surface is formed in the X-Y-Z space. For example, the X axis might
 correspond to applied voltage and Y axis to temperature and calculated value might be
 current. More often than not, such surface have large smooth regions and small regions
