@@ -56,7 +56,7 @@ This is pretty smooth. And here is the grid with vertexes.
 </center>
 <br/>
 You can see that vertexes cluster right they need to be to expose essential features 
-of the surface.
+of the surface and most importantly it required only 1423 vertexes. 
 
 Algorithm
 ---------
