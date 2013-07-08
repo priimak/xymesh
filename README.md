@@ -23,14 +23,15 @@ calculating for the following function
 ```ruby
 Math::cos(x**2+y**2)/(x**2+y**2+0.5)
 ```
-For the mesh shown above, for X and Y changing from -2 to 2 and 36 vertexes in total
+For the simple rectangular mesh, for X and Y changing from -2 to 2 and 121 vertexes 
+in total
 <br/>
 <center>
 <img src="images/rough_surface.gif"/>
 </center>
 <br/>
 That is very rough, however there are just a couple of regions where we need the fine 
-mesh here. Here is an example of how it looks with the fine mesh.
+mesh. Here is an example of how it looks with the fine mesh.
 <br/>
 <center>
 <img src="images/fine_surface.gif"/>
