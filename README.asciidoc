@@ -21,8 +21,14 @@ And this is exactly what this ruby package does.
 Algorithm
 ---------
 
+TO BE WRITTEN
+
 Installation
 ------------
 
+TO BE WRITTEN
+
 Usage
 -----
+
+TO BE WRITTEN
