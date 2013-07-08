@@ -131,6 +131,16 @@ module XYMesh
       self
     end
 
+    # @return [Float] current maximum curvature among all the tiles
+    def max_nvariance() 
+      max_curvature = 0
+      @tiles.each { |i, t| 
+        c = t.value.nvariance()
+        max_curvature = c if c > max_curvature
+      }
+      max_curvature
+    end
+
     # Perform evaluation of z-value on each vertex in the grid
     # @return [Grid2D] self
     def compute(computer=nil)
