@@ -25,6 +25,12 @@ class Array
     retval << "]"
     retval.string
   end
+
+  # substract self vector from another 3D vector
+  def v_minus(v)
+    [v[0]-self[0],v[1]-self[1],v[2]-self[2]]
+  end
+
 end # end of open class Array
 
 module XYMesh
@@ -48,7 +54,14 @@ module XYMesh
     # @return [Array] array of vetixes
     # @see Vertex
     attr_accessor :vtxs
-    
+
+    # This accessor can be use to set maximum number of vertexes that can 
+    # exist in the mesh, which limits number of calculatons to be performed.
+    # Default value is nil, which means that vertixes will be created 
+    # indefinitely until conditions for their creation cease to exist.
+    # @return [Fixnum] number indicating maximim number of vertixes 
+    attr_accessor :max_vertexes
+
     # @param x_min [Float] minimum value along the X-axis
     # @param x_max [Float] maximum value along the X-axis
     # @param n_x [Fixnum] number of segments along the X-axis, which gives n_x+1 points.
@@ -71,6 +84,8 @@ module XYMesh
       @tiles = LList.new
 
       @computer = computer
+
+      @max_vertexes = nil # number iv vertixes is unlimited
 
       # fill up vertexes
       idx=1
@@ -111,15 +126,27 @@ module XYMesh
       refined = 0
       tiles_to_split=[]
       @tiles.each { |i, t| 
-        if t.value.nvariance() > max_curvature
-          tiles_to_split << t.value
+        nvr = t.value.nvariance()
+        if nvr[1] > max_curvature 
+          # Something needs to be split, either this tile or its counterpart which gives 
+          # us highest nvariance. So we will split the one that has largest perimeter
+          if nvr[0].perimeter > t.value.perimeter
+            tiles_to_split << nvr[0]
+          else
+            tiles_to_split << t.value
+          end
         end
       }
       tiles_to_split.each { |t|
-        t.split_and_evaluate() if t.inspect?
+        t.split_and_evaluate() if t.inspect?        
+        refined = refined + 1
+        if not @max_vertexes.nil? and @vtxs.size >= @max_vertexes
+          print "#{@vtxs.size} vs #{@max_vertexes}\n"
+          return 0
+        end
       }
 
-      tiles_to_split.size
+      refined
     end
 
     # Same as 'refine(max_curvature)', but will contain recursively until maximum tile 
@@ -202,6 +229,9 @@ module XYMesh
 
       @grd  = grd
       @nv   = nil
+      @av   = nil
+
+      @prm  = nil # perimeter
 
       # regsiter this tile with each vertex that forms it
       @vtx.each { |v| @grd.vtxs[v-1].register_tile(self) }
@@ -209,29 +239,35 @@ module XYMesh
       @inspect=true
       @lnode = nil
     end
-    
+
+    def perimeter
+      return @prm unless @prm.nil?
+      @prm = 
+        @grd.vtxs[vtx[0]-1].minus(@grd.vtxs[vtx[1]-1]).abs +
+        @grd.vtxs[vtx[0]-1].minus(@grd.vtxs[vtx[2]-1]).abs +
+        @grd.vtxs[vtx[1]-1].minus(@grd.vtxs[vtx[2]-1]).abs
+    end
+
     # Find all nearby tiles connected to this one through the common edges ( up to three tiles )
-    # and for each tile calculate cross product between normal vectors of this tile and nearby ones
-    # Return maximum of these three cross products by absolute value. This will be our rough measure 
-    # of curvature of surface formed this set of tiles.
+    # and for each tile calculate cross product between normal vectors of this tile and nearby ones.
+    # Find the one that give maximum of these three cross products by absolute value and return array 
+    # where first element is adjacent tile that gives us maximum nvariance and second element is 
+    # the nvariance. This will be our rough measure of curvature of surface formed this set of tiles.
     def nvariance(debug=false)
       nv0 = self.normal_vector
       all_near_by_tiles = []
       all_near_by_tiles << ( @grd.vtxs[vtx[0]-1].tiles & @grd.vtxs[vtx[1]-1].tiles )
       all_near_by_tiles << ( @grd.vtxs[vtx[0]-1].tiles & @grd.vtxs[vtx[2]-1].tiles )
       all_near_by_tiles << ( @grd.vtxs[vtx[1]-1].tiles & @grd.vtxs[vtx[2]-1].tiles )
-      all_near_by_tiles.flatten!
-      all_near_by_tiles.reject! { |t| t == self }.uniq!
-      #all_near_by_tiles.each { |t|
-      # puts "#{t} #{@grd.vtxs[t.vtx[0]-1]} #{@grd.vtxs[t.vtx[1]-1]} #{@grd.vtxs[t.vtx[2]-1]} #{t.normal_vector}\n"
-      # t.form_normal_vector(true)
-      #}
-      m=all_near_by_tiles.map { |t| t.normal_vector }
-      print "#{self}->#{nv0}->#{nv0.abs}\n" if debug
+      all_near_by_tiles.flatten!.reject! { |t| t == self }.uniq!
+
       if debug
-        m.each { |nv| print "#{nv0}x#{nv}->#{nv0.cross_product(nv).abs}\n"  }
+        all_near_by_tiles.map { |t|
+          print "T: #{t}\n"
+        }
       end
-      m.map { |nv| nv0.cross_product(nv).abs }.max
+
+      all_near_by_tiles.map { |t| [t, nv0.cross_product(t.normal_vector).abs] }.sort { |a,b| a[1] <=> b[1] }.last
     end
     
     # Create back reference to LNode in which this tile is a payload.
@@ -249,11 +285,9 @@ module XYMesh
       self.vtx == tile.vtx
     end
 
-    # Form normal vector to this tile if needed and return it.
-    def normal_vector
-      if !@nv.nil? 
-        return @nv
-      end
+    def area_vector
+      return @av unless @av.nil? 
+
       r1x=@grd.vtxs[vtx[1]-1].x-@grd.vtxs[vtx[0]-1].x
       r1y=@grd.vtxs[vtx[1]-1].y-@grd.vtxs[vtx[0]-1].y
       r1z=@grd.vtxs[vtx[1]-1].value-@grd.vtxs[vtx[0]-1].value
@@ -265,24 +299,26 @@ module XYMesh
       #  print "n1=[#{r1x},#{r1y},#{r1z}] n2=[#{r2x},#{r2y},#{r2z}]\n"
       #end
 
-      nv = [(r1y*r2z-r1z*r2y), (r1z*r2x-r1x*r2z), (r1x*r2y-r1y*r2x)]
-      length = Math::sqrt(nv[0]**2+nv[1]**2+nv[2]**2)
+      @av = [(r1y*r2z-r1z*r2y), (r1z*r2x-r1x*r2z), (r1x*r2y-r1y*r2x)]
+    end
+
+    # Form normal vector to this tile if needed and return it.
+    def normal_vector
+      return @nv unless @nv.nil? 
+
+      nv = self.area_vector
+      length = nv.abs
+
       nvv=nv.map { |e| e/length }
       def nvv.to_s
         "NV:=(#{self[0]}, #{self[1]}, #{self[2]})"
       end
       @nv = nvv
-      @nv
     end
 
     # Has this tile been inspected
     def inspect?
       @inspect
-    end
-
-    # Pretty print
-    def to_s
-      "Tile[#{@vtx[0]},#{@vtx[1]},#{@vtx[2]};#{@inspect?'t':'f'}]"
     end
 
     # Split new tile and calculate new value for new vertex
@@ -366,7 +402,13 @@ module XYMesh
       @grd.vtxs[vtx2-1].remove_tile self
       @grd.vtxs[vtx3-1].remove_tile self
     end
-  end
+
+    # Pretty print
+    def to_s
+      "Tile[#{@vtx[0]-1}:#{@grd.vtxs[@vtx[0]-1]},#{@vtx[1]-1}:#{@grd.vtxs[@vtx[1]-1]},#{@vtx[2]-1}:#{@grd.vtxs[@vtx[2]-1]};#{@inspect?'t':'f'}]"
+    end
+
+  end # end of class Tile
 
   # This class represents point in the grid. In the normal course of events you do not have 
   # explicitly create instances of this class.
@@ -406,6 +448,13 @@ module XYMesh
     def remove_tile(tile)
       @tiles.reject! { |t| t == tile }
       self
+    end
+
+    # Vertxes been vectors can be substructed from one another using this method
+    # to substruct self from another 'vtx'.
+    # @return [Array]
+    def minus(vtx)
+      [@x - vtx.x, @y - vtx.y, @value - vtx.value]
     end
 
     # Given a registered in the grid computer function, compute z value for this node.
