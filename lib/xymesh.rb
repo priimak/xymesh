@@ -163,7 +163,7 @@ module XYMesh
       max_curvature = 0
       @tiles.each { |i, t| 
         c = t.value.nvariance()
-        max_curvature = c if c > max_curvature
+        max_curvature = c[1] if c[1] > max_curvature
       }
       max_curvature
     end
