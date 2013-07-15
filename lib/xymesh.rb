@@ -31,7 +31,7 @@ class Array
     [v[0]-self[0],v[1]-self[1],v[2]-self[2]]
   end
 
-end # end of open class Array
+end # of open class Array
 
 module XYMesh
 
@@ -62,6 +62,22 @@ module XYMesh
     # @return [Fixnum] number indicating maximim number of vertixes 
     attr_accessor :max_vertexes
 
+    # return [Float] minimum area of the tile projected to X-Y plance in percentage from 0 to 1
+    attr_reader :min_tile_projected_area
+
+    # return [Float] actual minimum value of the area of projected tile on X-Y plane
+    attr_reader :min_area_xy
+
+
+    # return [Proc] function which is called after each iteration in refine_recursively() and 
+    # right after compute(). This function recieves refefence to this class (Grid2D) and a 
+    # number of newly created vertexes
+    attr_accessor :iter_callback
+
+    # @return [Float] when stored data is loaded from java3d obj file then this value might be set
+    # which you can use to set original max_nvariance value for refinement
+    attr_accessor :nvariance_limit
+
     # @param x_min [Float] minimum value along the X-axis
     # @param x_max [Float] maximum value along the X-axis
     # @param n_x [Fixnum] number of segments along the X-axis, which gives n_x+1 points.
@@ -77,25 +93,26 @@ module XYMesh
       @y_max = y_max
       @n_y   = n_y
 
-      @min_val = 0
-      @max_val = 0
-
       @vtxs  = []
       @tiles = LList.new
 
       @computer = computer
 
+      @nvariance_limit = nil # not set yet
+
       @max_vertexes = nil # number iv vertixes is unlimited
+
+      @min_area_xy = 0
 
       # fill up vertexes
       idx=1
-      dx=(x_max-x_min)/n_x.to_f
-      dy=(y_max-y_min)/n_y.to_f
+      @dx=(x_max-x_min)/n_x.to_f
+      @dy=(y_max-y_min)/n_y.to_f
       (0..@n_y).to_a.each { |m|
-        y=@y_min+dy*m
+        y=@y_min+@dy*m
         (0..@n_x).to_a.each { |n|
-          x=@x_min+dx*n
-          vtx = Vertex.new(x, @y_min+dy*m, self)
+          x=@x_min+@dx*n
+          vtx = Vertex.new(x, y, self)
           vtxs << vtx
           if( n > 0 && m > 0 )
             t=Tile.new(idx, idx-1, idx-n_x-2, self)
@@ -108,6 +125,26 @@ module XYMesh
         }
       }
     end
+
+    # Errors in numerical simulations may lead to small errors/ripples on the generated surface
+    # which can lead to indefinite recursion once the size of the tiles becomes comparable to
+    # size of the ripples. To prevent this from happening you can set this variable to set minimum 
+    # area of projected to X-Y plane newly generated tiles in percentage from 0 to 1 of original,
+    # starting tiles.
+    # @return [Float] value that has been set
+    def min_tile_projected_area=(min_area_xy_percentage)
+      if min_area_xy_percentage.nil?
+        @min_area_xy = 0
+      else
+        if min_area_xy_percentage < 0 or min_area_xy_percentage > 1
+          raise "min_area_xy_percentage can only be between 0 and 1"
+        end
+        @min_area_xy_percentage = min_area_xy_percentage
+        @min_area_xy = @dx * @dy * 0.5 * @min_area_xy_percentage
+      end
+
+      @min_area_xy_percentage
+    end # of min_tile_projected_area(...)
 
     # @param tile [Tile] to be found in list of tiles tracked by this grid
     # @return [Fixnum] index of the tile in the list. Note that indexing starts with 1, not 0.
@@ -123,6 +160,7 @@ module XYMesh
     # @param max_curvature [Float] curvature value below which we perform mesh refinement
     # @return [Fixnum] number of tiles that have been split
     def refine(max_curvature)
+      @nvariance_limit = max_curvature
       refined = 0
       tiles_to_split=[]
       @tiles.each { |i, t| 
@@ -138,23 +176,33 @@ module XYMesh
         end
       }
       tiles_to_split.each { |t|
-        t.split_and_evaluate() if t.inspect?        
-        refined = refined + 1
-        if not @max_vertexes.nil? and @vtxs.size >= @max_vertexes
-          print "#{@vtxs.size} vs #{@max_vertexes}\n"
-          return 0
+        if t.inspect? and t.area_vector()[2].abs > @min_area_xy
+          t.split_and_evaluate() 
+          refined = refined + 1
         end
+        return 0 if not @max_vertexes.nil? and @vtxs.size >= @max_vertexes
       }
-
       refined
-    end
+    end # of refine(...)
 
     # Same as 'refine(max_curvature)', but will contain recursively until maximum tile 
     # curvature falls bellow max_curvature
     # @return [Grid2D] self
     def refine_recursively(max_curvature) 
-      while self.refine(max_curvature) > 0
+      refined = self.refine(max_curvature)
+      while refined > 0
+        if not @iter_callback.nil?
+          @iter_callback.call(self, refined)
+        end
+
+        refined = self.refine(max_curvature)
       end
+      
+      if not @iter_callback.nil?
+        # last callback call should have refined=0
+        @iter_callback.call(self, refined)
+      end
+
       self
     end
 
@@ -175,9 +223,12 @@ module XYMesh
       cmptr = computer if !computer.nil?
       @vtxs.each { |v|
         val = v.compute(cmptr)
-        @min_val = val if val < @min_val
-        @max_val = val if val > @max_val
       }
+
+      if not @iter_callback.nil?
+        @iter_callback.call(self, @vtxs.size)
+      end
+
       self
     end
 
@@ -188,20 +239,65 @@ module XYMesh
       retval
     end
 
+    # Will save safely generated model to a file named 'fname' by writing first to a tmp 
+    # file named '#{fname}.tmp' and then moving over to 'fname'
+    # @return [Grid2D] self
+    def save_safe_to_java3d_obj_file(fname) 
+      tmp_file_name = "#{fname}.tmp"
+      File.open(tmp_file_name, "w") { |file|
+        file.write("# xymesh nvariance_limit #{@nvariance_limit.to_s}\n")
+        file.write(self.to_java3d_obj)
+      }
+      File.rename(tmp_file_name, fname)
+      self
+    end
+
+    # @return [Grid2D] self
+    def load_from_java3d_obj_file(fname)
+
+      # do nothing if it does not exist
+      return self unless File.exist?(fname) and File.readable?(fname)
+
+      # clear old grid
+      @vtxs = []
+      @tiles = LList.new
+
+      IO.readlines(fname).each { |l|
+        spll = l.split()
+        if spll.size == 4
+          case spll[0]
+          when "#" 
+            @nvariance_limit = spll[3].to_f if spll[1] == "xymesh" and spll[2] == "nvariance_limit" 
+
+          when "v"
+            # this is a vertex
+            @vtxs << Vertex.new(spll[1].to_f, spll[2].to_f, self, spll[3].to_f)
+
+          when "f"
+            # this is a tile
+            t=Tile.new(spll[1].to_i, spll[2].to_i, spll[3].to_i, self)
+            t.connect(@tiles.append(t))
+          end
+        end
+      }
+      self
+    end # end of load_from_java3d_obj_file(...)
+
     # @return [String] mesh in the Java3D obj file format
     # @see {http://download.java.net/media/java3d/javadoc/1.4.0/com/sun/j3d/loaders/objectfile/ObjectFile.html}
     def to_java3d_obj
       retval = StringIO.new
-      @vtxs.each { |v|      
-        val = v.initialized? ? v.value.to_s : "X"
+      @vtxs.each { |v|
+        val = v.initialized?() ? v.value.to_s : "X"
         retval << "v #{v.x} #{v.y} #{val}\n"
       }
       @tiles.each { |i,t|
         retval << "f #{t.value.vtx[0]} #{t.value.vtx[1]} #{t.value.vtx[2]}\n"
       }
       retval.string
-    end
-  end
+    end # of to_java3d_obj()
+
+  end # of class Grid2D
 
   # A tile is a flat triangular surface defined by three vertices.
   # All tiles are stored in the LNode in the linked list LList
@@ -332,7 +428,6 @@ module XYMesh
     def split(evaluate=false)
       @inspect = false # no more ispection for this tile
 
-      #print "splitting #{self}]\n"
       l=[0,1,2].map { |m| 
         ((m+1)..2).to_a.map { |n| 
           (@grd.vtxs[@vtx[m]-1].x-@grd.vtxs[@vtx[n]-1].x)**2+(@grd.vtxs[@vtx[m]-1].y-@grd.vtxs[@vtx[n]-1].y)**2
@@ -389,7 +484,6 @@ module XYMesh
         
         # unlink ajd_tile from the list
         adj_tile.unlink
-        #print "unlinking adj #{adj_tile}\n"
         adj_tile.inspect = false
         @grd.vtxs[vtx1-1].remove_tile adj_tile
         @grd.vtxs[vtx2-1].remove_tile adj_tile
@@ -408,7 +502,7 @@ module XYMesh
       "Tile[#{@vtx[0]-1}:#{@grd.vtxs[@vtx[0]-1]},#{@vtx[1]-1}:#{@grd.vtxs[@vtx[1]-1]},#{@vtx[2]-1}:#{@grd.vtxs[@vtx[2]-1]};#{@inspect?'t':'f'}]"
     end
 
-  end # end of class Tile
+  end # of class Tile
 
   # This class represents point in the grid. In the normal course of events you do not have 
   # explicitly create instances of this class.
@@ -419,11 +513,12 @@ module XYMesh
     # @param x [Float] x coordinate of the Vertex
     # @param y [Float] x coordinate of the Vertex
     # @param grd [Grid2D] reference to a grid object
-    def initialize(x, y, grd)
+    # @param value [Float] optional z coordinate of the Vertex. Default is 0.
+    def initialize(x, y, grd, value=nil)
       @x = x
       @y = y
-      @initialized = false
-      @value = 0
+      @initialized = !value.nil?
+      @value = value.nil?() ? 0 : value
       @grd = grd
 
       @tiles = []
@@ -462,6 +557,9 @@ module XYMesh
     #
     # @return [Float] computed value
     def compute(computer=nil)
+      # do not re-compute
+      return @value if @initialized
+
       cmptr=@grd.computer
       cmptr = computer if !computer.nil?
       @value = cmptr.call(x, y)
