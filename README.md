@@ -59,6 +59,26 @@ This is pretty smooth. And here is the grid with vertexes.
 You can see that vertexes cluster right they need to be to expose essential features 
 of the surface and most importantly it required only 1481 vertexes. 
 
+Here is an example of an actual simulation. 
+<br/>
+<center>
+<img src="images/simulation_surface_and_grid.gif"/>
+</center>
+<br/>
+Again, you can see here that vertexes cluster in the areas that contain essential 
+features where curvature is the greatest. 
+Following X-Y view show projections of generated grid and its zoom
+<br/>
+<center>
+<img src="images/simulation_grid_xy.gif"/>
+</center>
+<br/>
+<br/>
+<center>
+<img src="images/simulation_grid_xy_detail.gif"/>
+</center>
+<br/>
+
 Algorithm
 ---------
 
