@@ -106,9 +106,9 @@ pseudo-code this process looks like this
         vertex.z = compute(vertex.x, vertex.y)
 
     do 
-        total_tiles_split = 0
+        tiles_split = 0
         foreach tile in Tiles
-            if nvariance(tile) > max_nvariance
+            if largest_nvariance(tile) > max_nvariance
                 nv_tile = tile_with_which_this_tile_tile_has_largest_nvariance(tile) 
                 if perimeter_of(tile) > perimeter_of(nv_tile) 
                     mark_for_splitting(tile)
@@ -118,8 +118,8 @@ pseudo-code this process looks like this
         foreach tile in maked_for_splitting(Tiles)
             if area_in_XY_plane(tile) > min_tile_area
                 split_and_compute_at_new_vertex(tile)
-                total_tiles_split = total_tiles_split + 1
-    while total_tiles_split > 0
+                tiles_split = tiles_split + 1
+    while tiles_split > 0
 
 Installation
 ------------
