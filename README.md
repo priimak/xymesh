@@ -197,7 +197,7 @@ Here is a complete script that you can use to cat and paste
 
 Now a more realistic example would be if your compute function is actually another program that 
 upon execution appends data to some csv file, line by line for each invocation. Then we just need 
-change **computer** variable above. For example it could look like this 
+to change value of **computer** variable above. For example it could look like this 
 
     computer = Proc.new { |e,omega| 
       system("./boltzmann_solver --E=#{e} --omega=#{omega} -o=+boltzmann.data")
