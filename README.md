@@ -124,10 +124,151 @@ pseudo-code this process looks like this
 Installation
 ------------
 
+To install using following instructions you may need to install 'rubygems' package.
+
     $ gem build xymesh.gemspec
     $ sudo gem install ./xymesh-0.1.0.gem
 
 Usage
 -----
 
-TO BE WRITTEN
+To use this package you most likely will need to write a ruby script. Here is a basic 
+skeleton of what needs to be in the script.  First you need to link to 'xymesh' package 
+like this 
+
+    require 'xymesh'
+
+Then you need to create Proc function, which will be used to compute Z values at 
+given X and Y points ( vertexes ). For above mentioned example of sombrero looking 
+function, it will look like this
+
+    computer = Proc.new { |x,y| Math::cos(x**2+y**2)/(x**2+y**2+0.5)}
+
+Create Grid2D object populated with coarse rectangular mesh of vertexes
+
+    grd = XYMesh::Grid2D.new(-2,2,10, -2,2,10, computer)
+
+along the X axis we have 11 points from -2 to 2 braking that interval into 10 parts, 
+and similarly along the Y axis. Now set minimum tile size in X-Y projection
+
+    grd.min_tile_projected_area = 0.01
+
+which indicates that minimum tile size in X-Y projection will be **original_tile_area * 0.01**.
+Now compute Z values at the vertexes
+
+    grd.compute
+
+
+Now that tile are fully defined (initialized) you want to find existing maximum value 
+of nvariance among the all adjacent tile pairs. And set new nvariance limit to be fraction 
+of that value. To archive same result as in the pictures above you can use 1/6 of max nvariance
+
+    new_max_nvariance = grd.max_nvariance()/6.0
+
+Now start recursive process of refinement 
+
+    grd.refine_recursively(new_max_nvariance)
+
+This method scans all the tiles from first to last and splits them if their nvariance is 
+greater than `new_max_nvariance` and X-Y tile are is greater than `min_tile_projected_area`.
+Once last tile is reached it starts scanning them again until no tiles are split. And now we save 
+result using java3d obj file format
+
+    grd.save_safe_to_java3d_obj_file("hat.obj")
+
+This method is called **save_safe** because it first saves data to a tmp file **#{fileName}.tmp** 
+and then moves it over to a **#{fileName}**.
+You can then view this file using any viewer that supports java3d format. To generate pictures for 
+this page I used [javaview](http://www.javaview.de/index.html)
+
+Here is a complete script that you can use to cat and paste
+
+    #!/usr/bin/env ruby
+    
+    require 'xymesh'
+    
+    computer = Proc.new { |x,y| Math::cos(x**2+y**2)/(x**2+y**2+0.5)}
+    grd = XYMesh::Grid2D.new(-2,2,3, -2,2,3, computer)
+    grd.min_tile_projected_area = 0.01
+    grd.compute
+    new_max_nvariance = grd.max_nvariance()/6.0
+    grd.refine_recursively(new_max_nvariance)
+    grd.save_safe_to_java3d_obj_file("hat.obj")
+
+Now a more realistic example would be if your compute function is actually another program that 
+upon execution appends data to some csv file, line by line for each invocation. Then we just need 
+change **computer** variable above. For example it could look like this 
+
+    computer = Proc.new { |e,omega| 
+      system("./boltzmann_solver --E=#{e} --omega=#{omega} -o=+boltzmann.data")
+      IO::readlines("boltzmann.data")[-1].split()[5].to_f
+    }
+
+where boltzmann_solver is a C program that appends results to space separated file **boltzmann.data** 
+line by line. Calling
+
+    IO::readlines("boltzmann.data")[-1]
+
+give us last line that file, which we split on spaces
+
+    IO::readlines("boltzmann.data")[-1].split()
+
+and in this example we take the 5th element (counted from 0), convert it to float are return it
+
+    IO::readlines("boltzmann.data")[-1].split()[5].to_f
+
+Note, that in Ruby we do not have use **return** statement here since the value of last 
+evaluated statement is returned by default. Now you may want to perform refinement process 
+interactively by slowly reducing value of `new_max_nvariance`, which means that after 
+saving results into **.obj** file you may want to restart computation from that point. To
+do that you can try loading **.obj** file right after creation of Grid2D object. Assuming 
+that **.obj** file is **boltzmann.obj** it will look like this
+
+    grd.load_from_java3d_obj_file("boltzmann.obj")
+
+If the file **boltzmann.obj** does not exist or is not readable then it is a NOOP. If the 
+obj file is successfully loaded then calling **grd.compute** is a NOOP. Additionally, in
+the obj file we store value of `max_nvariance` that was used when file was generated. 
+You can access that value by calling **grd.nvariance_limit**, which you then can use to set 
+`new_max_nvariance` to the same value as one used originally. You can do that like this
+
+    new_max_nvariance = grd.nvariance_limit.nil?() ? (grd.max_nvariance()/6.0) : grd.nvariance_limit
+
+Now you may also want to view result of each refinement iteration. You can do so by using callback 
+Proc function to save intermediate results in the obj file. Do to that you set value of `grd.iter_callback`, 
+which is then called at the end of **grd.compute** method and each, including the last one, 
+iterative refinement stages. You can do this like this
+
+    grd.iter_callback = Proc.new { |grd2d, refined|
+      print "refined = #{refined}\n"
+      grd2d.save_safe_to_java3d_obj_file("boltzmann.obj")
+    }
+
+where **grd2d** is the reference to the same object as one referred to by **grd** variable 
+and variable **refined** refers to number of tiles that were split at this iteration. So, here 
+is a complete example script that you can use as a skeleton for your particular case.
+
+    #!/usr/bin/env ruby
+    
+    require 'xymesh'
+
+    computer = Proc.new { |e,omega| 
+      system("./boltzmann_solver --E=#{e} --omega=#{omega} -o=+boltzmann.data")
+      IO::readlines("boltzmann.data")[-1].split()[5].to_f
+    }
+
+    grd = XYMesh::Grid2D.new(0,10,10, 0,8,10, computer)
+    grd.min_tile_projected_area = 0.01
+    grd.load_from_java3d_obj_file("boltzmann.obj")
+
+    grd.iter_callback = Proc.new { |grd2d, refined|
+      print "refined = #{refined}\n"
+      grd2d.save_safe_to_java3d_obj_file("boltzmann.obj")
+    }
+
+    grd.compute
+    new_max_nvariance = grd.nvariance_limit.nil?() ? (grd.max_nvariance()/6.0) : grd.nvariance_limit
+    grd.refine_recursively(new_max_nvariance)
+
+You, obviously, need to change call to **./boltzmann_solver** to whatever the program you are using, 
+as well as definition of the grid and obj file name.
