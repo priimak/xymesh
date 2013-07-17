@@ -70,7 +70,7 @@ two we use term "**nvariance**" and it is defined as following.
 For each of the tiles
 we compute normal vector (shown in blue in the picture above) and for each adjacent 
 tile ( sharing common edge ) we take a cross product of their normal vectors, 
-absolute value of which we call nvariance or **NV**
+absolute value of which we call nvariance or **NV**.
 Thus nvariance can be calculated for any two pairs of tiles **i** and **j**, i.e. 
 **NV=f(i,j)**. For us only nvariance of adjacent tiles has meaning of rough 
 approximation of curvature. Obviously normal vectors of being length 1, nvariance changes 
@@ -92,17 +92,39 @@ will be split along the common edge of tiles 2 and 3. By always splitting to the
 edge of larger, by perimeter, of two tiles, we avoid pathological case when very thing, with 
 small surface area and large perimeter, tiles are created. This process could continue 
 indefinitely until no two adjustment tiles have nvariance greater than desired. However, 
-if there is some noise in the Z value, for example due to numerical errors in simulation
+if there is some noise in the Z value, for example due to numerical errors in simulation,
 then once the tile size reaches size comparable with size of these noise ripples our 
 recursive process may restart and continue indefinitely. We need to limit either number 
 of vertexes or area of the tiles. In this algorithm we limit not the area of the tile, 
 but the area of its projection to X-Y plane in percentage, from 0 to 1, of the area of 
-the original unrefined tiles. This guaranties that this refinement process stops.
+the original unrefined tiles. This guaranties that this refinement process stops. In 
+pseudo-code this process looks like this
+
+    Vertexes,Tiles = initialize_mesh(Xmin,Xmax,Nx, Ymin,Ymax,Ny)
+    
+    foreach vertex in Vertexes
+        vertex.z = compute(vertex.x, vertex.y)
+
+    do 
+        total_tiles_split = 0
+        foreach tile in Tiles
+            if nvariance(tile) > max_nvariance
+                nv_tile = tile_with_which_this_tile_tile_has_largest_nvariance(tile) 
+                if perimeter_of(tile) > perimeter_of(nv_tile) 
+                    mark_for_splitting(tile)
+                else
+                    mark_for_splitting(nv_tile)
+
+        foreach tile in maked_for_splitting(Tiles)
+            if area_in_XY_plane(tile) > min_tile_area
+                split_and_compute_at_new_vertex(tile)
+                total_tiles_split = total_tiles_split + 1
+    while total_tiles_split > 0
 
 Installation
 ------------
 
-    $ gem build xymesh.gemspec <br/>
+    $ gem build xymesh.gemspec
     $ sudo gem install ./xymesh-0.1.0.gem
 
 Usage
