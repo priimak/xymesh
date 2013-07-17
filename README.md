@@ -129,8 +129,13 @@ install 'rubygems' package for the following procedure to succeed.
 
     $ git clone git@github.com:priimak/xymesh.git
     $ cd xymesh    
+    $ git checkout 0.1.0
     $ gem build xymesh.gemspec
     $ sudo gem install ./xymesh-0.1.0.gem
+
+This will install code for version `0.1.0`. To see other (older) tags you can do
+
+    $ git tag --list
 
 Usage
 -----
@@ -160,7 +165,6 @@ which indicates that minimum tile size in X-Y projection will be **original_tile
 Now compute Z values at the vertexes
 
     grd.compute
-
 
 Now that tile are fully defined (initialized) you want to find existing maximum value 
 of nvariance among the all adjacent tile pairs. And set new nvariance limit to be fraction 
