@@ -127,9 +127,9 @@ Installation
 You can install this ruby package directly from git repository. Note, that you may need to 
 install 'rubygems' package for the following procedure to succeed.
 
-    $ git clone git@github.com:priimak/xymesh.git
-    $ cd xymesh    
-    $ git checkout 0.1.0
+    $ wget https://github.com/priimak/xymesh/archive/0.1.0.tar.gz
+    $ tar zxvf 0.1.0.tar.gz
+    $ cd xymesh-0.1.0
     $ gem build xymesh.gemspec
     $ sudo gem install ./xymesh-0.1.0.gem
 
